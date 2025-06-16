@@ -1,3 +1,14 @@
 <resources>
     <string name="app_name">StellarEyes</string>
+    <string name="app_name_full">StellarEyes App</string> <!-- 更完整的应用名 -->
+
+    <string name="about_screen_title">关于</string>
+    <string name="navigate_back_content_description">返回</string>
+    <string name="app_icon_content_description">应用图标</string>
+    <string name="version_prefix">版本:</string>
+    <string name="copyright_notice">© %1$s %2$s. 保留所有权利.</string> <!-- %1$s 是年份, %2$s 是公司/开发者名 -->
+    <string name="app_description_long">StellarEyes 是一款利用设备摄像头进行实时人脸检测与识别的应用程序。用户可以通过摄像头识别人脸，并将识别出的人脸信息与预存数据进行匹配与管理。应用旨在提供便捷、高效的人脸数据管理体验，同时支持自定义设置以满足不同场景的需求。</string>
+    <string name="developed_by_prefix">开发者:</string>
+    <string name="acknowledgements_title">鸣谢</string>
+    <string name="view_source_code_button">在GitHub上查看源代码</string>
 </resources>
