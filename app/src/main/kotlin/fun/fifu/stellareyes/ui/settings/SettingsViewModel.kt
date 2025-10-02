@@ -21,7 +21,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
+            started = SharingStarted.Eagerly,
             initialValue = false
         )
 
@@ -31,7 +31,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
+            started = SharingStarted.Eagerly,
             initialValue = false
         )
 
@@ -41,7 +41,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
+            started = SharingStarted.Eagerly,
             initialValue = false // 与 map 中的默认值一致
         )
 
@@ -59,7 +59,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
+            started = SharingStarted.Eagerly,
             initialValue = true
         )
 

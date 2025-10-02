@@ -38,7 +38,6 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import `fun`.fifu.stellareyes.NcnnController as ncnnController
 
-// 定义屏幕路由 (可以放在单独的文件中)
 sealed class Screen(val route: String) {
     object Main : Screen("main_screen")
     object Settings : Screen("settings_screen")
@@ -51,17 +50,15 @@ class MainActivity : ComponentActivity() {
     private lateinit var cameraExecutor: ExecutorService
     private var showPermissionDeniedMessage by mutableStateOf(false)
 
+    // 整个 Activity 共用的 SettingsViewModel
+    private val settingsViewModel by lazy {
+        SettingsViewModel(application)
+    }
+
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
-            if (isGranted) {
-                showPermissionDeniedMessage = false
-                // setupUi() // setupUi 现在由 NavHost 控制
-            } else {
-                showPermissionDeniedMessage = true
-                Log.e("MainActivity", "Camera permission denied.")
-                // setupUi() // setupUi 现在由 NavHost 控制
-            }
-            // 触发 recomposition 来更新 NavHost 的内容
+            showPermissionDeniedMessage = !isGranted
+            Log.e("MainActivity", if (isGranted) "Camera permission granted." else "Camera permission denied.")
             setContent { AppNavigation() }
         }
 
@@ -69,15 +66,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         cameraExecutor = Executors.newSingleThreadExecutor()
 
+        // NCNN 初始化
         lifecycleScope.launch(Dispatchers.IO) {
-            Log.d("MainActivity", "NCNN initialization coroutine started.")
-            val isInitialized = ncnnController.setupNcnn(assets)
-            if (isInitialized) {
-                Log.d("MainActivity", "NCNN initialized successfully!")
-            } else {
-                Log.e("MainActivity", "Failed to initialize NCNN.")
-            }
-            Log.d("MainActivity", "NCNN initialization coroutine finished.")
+            val ok = ncnnController.setupNcnn(assets)
+            Log.d("MainActivity", "NCNN init ${if (ok) "success" else "failed"}")
         }
 
         checkCameraPermissionAndSetup()
@@ -85,55 +77,31 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun checkCameraPermissionAndSetup() {
-        when (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)) {
-            PackageManager.PERMISSION_GRANTED -> {
-                showPermissionDeniedMessage = false
-                setContent { AppNavigation() }
-            }
-
-            else -> {
-                requestPermissionLauncher.launch(Manifest.permission.CAMERA)
-            }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            showPermissionDeniedMessage = false
+            setContent { AppNavigation() }
+        } else {
+            requestPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
     }
 
-    // 将 UI 设置移到一个单独的 Composable 函数中，用于导航
     @SuppressLint("ViewModelConstructorInComposable")
     @Composable
-    fun AppNavigation() {
+    private fun AppNavigation() {
         val navController = rememberNavController()
         StellarEyesTheme {
-            Surface(
-                modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.background
-            ) {
-                val settingsViewModel = SettingsViewModel(application)
+            Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 NavHost(navController = navController, startDestination = Screen.Main.route) {
                     composable(Screen.Main.route) {
-                        if (showPermissionDeniedMessage) {
-                            PermissionDeniedScreen(
-                                onRequestPermission = {
-                                    // 再次请求权限或引导用户到设置
-                                    requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+                        when {
+                            showPermissionDeniedMessage -> PermissionDeniedScreen { requestPermissionLauncher.launch(Manifest.permission.CAMERA) }
+                            ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED ->
+                                StellarEyesAppScreen(navController = navController, viewModel = settingsViewModel)
+                            else ->
+                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    Text("正在检查相机权限…")
                                 }
-                            )
-                        } else if (ContextCompat.checkSelfPermission(
-                                this@MainActivity, // 注意这里的 Context
-                                Manifest.permission.CAMERA
-                            ) == PackageManager.PERMISSION_GRANTED
-                        ) {
-                            StellarEyesAppScreen(navController = navController,viewModel = settingsViewModel)
-                        } else {
-                            // 初始请求权限时的占位符，或者在权限被拒绝后，
-                            // 但 showPermissionDeniedMessage 还未更新时显示
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("正在检查相机权限...")
-                            }
                         }
-
                     }
                     composable(Screen.Settings.route) {
                         SettingsScreen(
@@ -143,26 +111,18 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     composable(Screen.ManageFaces.route) {
-                        ManageFacesScreen(
-                            onNavigateBack = {
-                                navController.popBackStack()
-                            }
-                        )
+                        ManageFacesScreen(onNavigateBack = { navController.popBackStack() })
                     }
                     composable(Screen.ABOUT.route) {
-                        AboutScreen(
-                            onNavigateBack = { navController.popBackStack() }
-                        )
+                        AboutScreen(onNavigateBack = { navController.popBackStack() })
                     }
                 }
             }
         }
     }
 
-
     override fun onDestroy() {
         super.onDestroy()
         cameraExecutor.shutdown()
-        // ncnnController.release()
     }
 }
