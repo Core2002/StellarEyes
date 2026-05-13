@@ -59,6 +59,10 @@ android {
 //            useLegacyPackaging = true
         }
     }
+    packagingOptions {
+        exclude("META-INF/INDEX.LIST")
+        exclude("META-INF/io.netty.versions.properties")
+    }
 }
 
 dependencies {    // ... other dependencies
@@ -105,4 +109,7 @@ dependencies {    // ... other dependencies
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+
+    implementation(libs.vertx.core)
+    implementation(libs.vertx.web)
 }

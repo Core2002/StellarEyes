@@ -26,6 +26,8 @@ runtimeLivedata = "1.8.3"
 ui = "1.8.3"
 tensorflow-lite = "2.17.0"
 tensorflow-lite-support = "0.5.0"
+vertxCore = "5.0.5"
+vertxWeb = "5.0.5"
 
 [libraries]
 # TensorFlow Lite
@@ -63,6 +65,8 @@ androidx-camera-core = { group = "androidx.camera", name = "camera-core", versio
 firebase-firestore-ktx = { group = "com.google.firebase", name = "firebase-firestore-ktx", version.ref = "firebaseFirestoreKtx" }
 androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "cameraLifecycle" }
 androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "cameraView" }
+vertx-web = { module = "io.vertx:vertx-web", version.ref = "vertxWeb" }
+vertx-core = { module = "io.vertx:vertx-core", version.ref = "vertxCore" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
