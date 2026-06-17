@@ -66,7 +66,7 @@ object FaceCatalogRepository {
     private const val KEY_TIMESTAMP = "timestamp"
     private const val KEY_DESCRIPTION = "description"
     private const val KEY_AVATAR = "_avatar"
-    private val allowedFieldKeys = setOf(KEY_ID, KEY_NAME, KEY_TIMESTAMP, KEY_DESCRIPTION)
+    private val allowedFieldKeys = setOf(KEY_ID, KEY_NAME, KEY_TIMESTAMP, KEY_DESCRIPTION, KEY_AVATAR)
 
     private val json = Json {
         prettyPrint = true
