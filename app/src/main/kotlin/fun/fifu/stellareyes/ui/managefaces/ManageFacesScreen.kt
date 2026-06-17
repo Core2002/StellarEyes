@@ -184,11 +184,11 @@ fun ManageFacesScreen(
                 }
             } else if (state.viewMode == CatalogViewMode.Grid) {
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(128.dp),
+                    columns = GridCells.Adaptive(100.dp),
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    contentPadding = PaddingValues(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(state.filteredItems, key = { it.id }) { item ->
                         FaceGridTile(
@@ -201,7 +201,7 @@ fun ManageFacesScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(12.dp),
+                    contentPadding = PaddingValues(8.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(state.filteredItems, key = { it.id }) { item ->
@@ -334,23 +334,23 @@ private fun FaceGridTile(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        shape = RoundedCornerShape(8.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        shape = RoundedCornerShape(6.dp)
     ) {
         Column(
-            modifier = Modifier.padding(10.dp),
+            modifier = Modifier.padding(6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             CatalogAvatar(
                 url = catalogImageValue(item, fields),
                 title = title,
-                size = 96.dp,
+                size = 80.dp,
                 previewEnabled = false
             )
             Text(
                 title,
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.bodySmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -907,7 +907,7 @@ private fun FieldConfigRow(
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("${field.key} (${field.label})", style = MaterialTheme.typography.titleSmall)
+                    Text("${field.key} (${field.label})", style = MaterialTheme.typography.bodySmall)
                     Text(field.type.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 IconButton(onClick = onDelete, enabled = field.key != "id") {
@@ -982,3 +982,5 @@ private fun defaultValue(field: CatalogFieldConfig): String {
         else -> ""
     }
 }
+
+
