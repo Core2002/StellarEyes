@@ -51,10 +51,11 @@ class ManageFacesViewModel(application: Application) : AndroidViewModel(applicat
         reload()
     }
 
-    fun reload() {
+   fun reload() {
         viewModelScope.launch(Dispatchers.IO) {
             val (items, fields) = FaceCatalogRepository.load(getApplication())
-            val cleanItems = items.map { FaceCatalogRepository.sanitizeItem(it) }
+            val reconciled = FaceCatalogRepository.reconcileWithVectors(items)
+            val cleanItems = reconciled.map { FaceCatalogRepository.sanitizeItem(it) }
             FaceCatalogRepository.save(getApplication(), cleanItems, fields)
             _uiState.value = ManageFacesUiState(items = cleanItems, fields = FaceCatalogRepository.defaultCatalogFields, loading = false)
         }

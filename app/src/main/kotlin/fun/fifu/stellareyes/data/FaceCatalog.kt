@@ -184,6 +184,36 @@ object FaceCatalogRepository {
         return item.fields[KEY_AVATAR]?.takeIf { it.isImageLike() }?.asDisplayString()
     }
 
+    fun reconcileWithVectors(currentItems: List<FaceCatalogItem>): List<FaceCatalogItem> {
+        val existingIds = currentItems.map { it.id }.toSet()
+        val vectorEntries = VectorSearchEngine.getAllEntries()
+        val missing = vectorEntries.filter { it.id !in existingIds }
+        if (missing.isEmpty()) return currentItems
+        val newItems = missing.map { face -> sanitizeItem(vectorToItem(face)) }
+        return currentItems + newItems
+    }
+
+    fun syncVectorEntry(context: Context, id: String) {
+        val storedFace = VectorSearchEngine.getEntrieById(id) ?: return
+        val (items, fields) = load(context)
+        if (items.any { it.id == id }) return
+        val newItem = sanitizeItem(vectorToItem(storedFace))
+        save(context, items + newItem, fields)
+    }
+
+    private fun vectorToItem(face: StoredFace): FaceCatalogItem {
+        return FaceCatalogItem(
+            id = face.id,
+            fields = mapOf(
+                KEY_ID to JsonPrimitive(face.id),
+                KEY_NAME to JsonPrimitive(face.name),
+                KEY_AVATAR to JsonPrimitive(face.imageUri),
+                KEY_TIMESTAMP to JsonPrimitive(face.timestamp),
+                KEY_DESCRIPTION to JsonPrimitive("")
+            )
+        )
+    }
+
     private fun exportFields(item: FaceCatalogItem): Map<String, JsonElement> {
         val sanitized = sanitizeItem(item)
         return sanitized.fields.filterKeys { it in allowedFieldKeys }

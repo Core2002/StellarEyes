@@ -42,6 +42,7 @@ import com.google.mlkit.vision.face.Face
 import `fun`.fifu.stellareyes.FaceNet
 import `fun`.fifu.stellareyes.data.StoredFace
 import `fun`.fifu.stellareyes.data.VectorSearchEngine
+import `fun`.fifu.stellareyes.data.FaceCatalogRepository
 import `fun`.fifu.stellareyes.data.VectorSearchEngine.cosineSimilarity
 import `fun`.fifu.stellareyes.ui.settings.SettingsViewModel
 import kotlinx.coroutines.CoroutineScope
@@ -260,13 +261,15 @@ object FaceRecognitionViewModel : ViewModel() {
 
     @OptIn(ExperimentalUuidApi::class)
     fun saveSelectedFace(context: Context, candidate: FaceCandidate) {
+        val id = Uuid.random().toString()
         VectorSearchEngine.add(
-            Uuid.random().toString(),
+            id,
             candidate.embedding,
             "p${System.currentTimeMillis()}", // Consider allowing user to name it
             bitmapToBase64Url(candidate.bitmap) // Assuming bitmapToBase64Url is defined
         )
         VectorSearchEngine.saveToFile(context)
+        FaceCatalogRepository.syncVectorEntry(context, id)
         recognitionState = RecognitionState.NewFaceAdded
         // After showing NewFaceAdded, reset to Idle. This could be handled by the dialog's onDismiss or a timer.
         // For simplicity now, the dialog's own actions will call resetState.
@@ -318,16 +321,17 @@ object FaceRecognitionViewModel : ViewModel() {
         val performInference = FaceNet.getFaceEmbedding(faceBitmap)
         val top1 = VectorSearchEngine.searchTop1(performInference)
         if (top1.first.isNullOrEmpty()) {
+            val id = Uuid.random().toString()
             VectorSearchEngine.add(
-                Uuid.random().toString(),
+                id,
                 performInference,
                 "P${System.currentTimeMillis()}",
                 bitmapToBase64Url(faceBitmap) // Assuming bitmapToBase64Url is defined
             )
             VectorSearchEngine.saveToFile(context)
+            FaceCatalogRepository.syncVectorEntry(context, id)
         }
     }
-
 
     @OptIn(ExperimentalCoroutinesApi::class)
     fun processAllFaces(
@@ -437,3 +441,6 @@ object FaceRecognitionViewModel : ViewModel() {
         }
     }
 }
+
+
+
