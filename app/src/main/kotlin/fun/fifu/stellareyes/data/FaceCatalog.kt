@@ -19,6 +19,9 @@ import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import java.io.File
+import kotlinx.coroutines.runBlocking
+import `fun`.fifu.stellareyes.FaceNet
+import `fun`.fifu.stellareyes.ui.camera.base64UrlToBitmap
 
 @Serializable
 enum class CatalogFieldType {
@@ -201,6 +204,37 @@ object FaceCatalogRepository {
         save(context, items + newItem, fields)
     }
 
+    /**
+     * Sync catalog items into VectorSearchEngine.
+     * Creates StoredFace entries for catalog items that have avatar images
+     * but no corresponding vector entry, then triggers vector recomputation.
+     */
+    fun syncCatalogToVectorStore(context: Context, items: List<FaceCatalogItem>) {
+        var changed = false
+        for (item in items) {
+            if (VectorSearchEngine.getEntrieById(item.id) != null) continue
+            val avatarUrl = avatarValue(item) ?: continue
+            val name = item.fields[KEY_NAME]?.asDisplayString().orEmpty()
+            val timestamp = item.fields[KEY_TIMESTAMP]?.asNumberOrNull()?.toLong()
+                ?: System.currentTimeMillis()
+            val vector = runBlocking(FaceNet.tfliteThread) {
+                val bitmap = base64UrlToBitmap(avatarUrl)
+                if (bitmap != null) FaceNet.getFaceEmbedding(bitmap) else FloatArray(512)
+            }
+            VectorSearchEngine.add(
+                id = item.id,
+                vector = vector,
+                name = name,
+                imageUri = avatarUrl,
+                timestamp = timestamp
+            )
+            changed = true
+        }
+        if (changed) {
+            VectorSearchEngine.saveToFile(context)
+        }
+    }
+
     private fun vectorToItem(face: StoredFace): FaceCatalogItem {
         return FaceCatalogItem(
             id = face.id,
@@ -272,3 +306,5 @@ fun JsonElement.isImageLike(): Boolean {
         value.endsWith(".webp") ||
         value.endsWith(".svg")
 }
+
+

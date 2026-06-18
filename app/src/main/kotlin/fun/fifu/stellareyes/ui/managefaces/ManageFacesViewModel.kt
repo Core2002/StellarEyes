@@ -133,9 +133,10 @@ class ManageFacesViewModel(application: Application) : AndroidViewModel(applicat
     fun importJson(uri: Uri, mode: ImportMode) {
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
-                val raw = FaceCatalogRepository.readTextFromUri(getApplication(), uri)
-                val imported = FaceCatalogRepository.parseItems(raw)
-                _uiState.update { state ->
+            val raw = FaceCatalogRepository.readTextFromUri(getApplication(), uri)
+            val imported = FaceCatalogRepository.parseItems(raw)
+            FaceCatalogRepository.syncCatalogToVectorStore(getApplication(), imported)
+            _uiState.update { state ->
                     val nextItems = FaceCatalogRepository.applyImport(state.items, imported, mode)
                         .map { FaceCatalogRepository.sanitizeItem(it) }
                     persist(nextItems, FaceCatalogRepository.defaultCatalogFields)
