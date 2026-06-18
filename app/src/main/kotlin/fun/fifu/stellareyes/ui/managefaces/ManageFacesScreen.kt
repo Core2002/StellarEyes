@@ -369,55 +369,71 @@ private fun FaceCatalogCard(
 ) {
     var expanded by remember(item.id) { mutableStateOf(false) }
     var quickField by remember { mutableStateOf<CatalogFieldConfig?>(null) }
-    val imageField = fields.firstOrNull { it.type == CatalogFieldType.Image && it.display && item.fields[it.key]?.isImageLike() == true }
+    val avatarUrl = catalogImageValue(item, fields)
     val visible = fields.filter { it.display && it.type != CatalogFieldType.Image && item.hasValue(it) }
     val collapsed = fields.filter { !it.display && item.hasValue(it) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         shape = RoundedCornerShape(8.dp)
     ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.Top) {
-                imageField?.let {
-                    CatalogAvatar(item.fields[it.key]?.asDisplayString(), catalogTitle(item, fields))
-                    Spacer(Modifier.width(12.dp))
-                }
-                Column(Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            catalogTitle(item, fields),
-                            style = MaterialTheme.typography.titleMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
-                        IconButton(onClick = { fields.firstOrNull { it.key != "id" && it.type == CatalogFieldType.Text && item.hasValue(it) }?.let { quickField = it } }) {
-                            Icon(Icons.Filled.Edit, contentDescription = "快速编辑标题")
-                        }
-                    }
-                    visible.filterNot { it.key == "id" }.take(if (compact) 4 else 8).forEach { field ->
-                        CatalogFieldRow(field, item.fields[field.key], onQuickEdit = { quickField = field })
-                    }
-                }
-                Column {
-                    IconButton(onClick = onEdit) {
-                        Icon(Icons.Filled.Edit, contentDescription = "编辑")
-                    }
-                    IconButton(onClick = onDelete) {
-                        Icon(Icons.Filled.Delete, contentDescription = "删除", tint = MaterialTheme.colorScheme.error)
-                    }
-                }
+        Row(
+            modifier = Modifier.padding(start = 12.dp, top = 12.dp, end = 4.dp, bottom = 12.dp)
+        ) {
+            if (avatarUrl != null) {
+                CatalogAvatar(
+                    url = avatarUrl,
+                    title = catalogTitle(item, fields),
+                    size = 56.dp,
+                    previewEnabled = false
+                )
+                Spacer(Modifier.width(12.dp))
             }
-            if (collapsed.isNotEmpty()) {
-                TextButton(onClick = { expanded = !expanded }) {
-                    Text(if (expanded) "收起字段" else "展开 ${collapsed.size} 个字段")
+            Column(Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        catalogTitle(item, fields),
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Filled.Edit, contentDescription = "编辑", modifier = Modifier.size(18.dp))
+                    }
+                    IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            Icons.Filled.Delete,
+                            contentDescription = "删除",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
-                if (expanded) {
-                    HorizontalDivider()
-                    collapsed.forEach { field ->
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    visible.filterNot { it.key == "id" }.take(if (compact) 2 else 4).forEach { field ->
                         CatalogFieldRow(field, item.fields[field.key], onQuickEdit = { quickField = field })
+                    }
+                }
+                if (collapsed.isNotEmpty()) {
+                    TextButton(
+                        onClick = { expanded = !expanded },
+                        modifier = Modifier.height(28.dp)
+                    ) {
+                        Text(
+                            if (expanded) "收起" else "展开 ${collapsed.size} 个字段",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                    if (expanded) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                        collapsed.forEach { field ->
+                            CatalogFieldRow(field, item.fields[field.key], onQuickEdit = { quickField = field })
+                        }
                     }
                 }
             }
@@ -982,5 +998,6 @@ private fun defaultValue(field: CatalogFieldConfig): String {
         else -> ""
     }
 }
+
 
 
