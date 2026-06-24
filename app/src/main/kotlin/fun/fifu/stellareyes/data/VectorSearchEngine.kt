@@ -14,10 +14,8 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.*
 import kotlinx.serialization.json.*
 import java.io.File
-import java.io.FileOutputStream
 import java.io.IOException
 import kotlin.math.sqrt
-import `fun`.fifu.stellareyes.NcnnController as ncnnController
 
 @Serializable
 data class StoredFace(
@@ -28,18 +26,20 @@ data class StoredFace(
     val timestamp: Long
 )
 
-val TAG = "VectorSearchEngine"
-
-
 object VectorSearchEngine {
 
+    private const val TAG = "VectorSearchEngine"
     private const val DIM = 512
     private const val FILE_NAME = "vectors.json"
+    private const val MATCH_THRESHOLD = 0.84f
 
     private val vectors = mutableListOf<StoredFace>()
+    private val lock = Any()
 
     fun clear() {
-        vectors.clear()
+        synchronized(lock) {
+            vectors.clear()
+        }
     }
 
     fun add(
@@ -50,34 +50,35 @@ object VectorSearchEngine {
         timestamp: Long = System.currentTimeMillis()
     ) {
         require(vector.size == DIM) { "Vector must be $DIM-dimensional" }
-        val safeVector = vector.map { v ->
-            if (v.isNaN() || v.isInfinite()) 0f else v
-        }.toFloatArray()
-        vectors.add(StoredFace(id, normalize(safeVector), name, imageUri, timestamp))
+        val safeVector = vector.sanitized()
+        synchronized(lock) {
+            vectors.removeAll { it.id == id }
+            vectors.add(StoredFace(id, normalize(safeVector), name, imageUri, timestamp))
+        }
     }
 
     fun searchTop1(query: FloatArray): Pair<String?, Float> {
         require(query.size == DIM) { "Query vector must be $DIM-dimensional" }
-        if (vectors.isEmpty()) return Pair(null, -1.0f)
+        val snapshot = getAllEntries()
+        if (snapshot.isEmpty()) return Pair(null, -1.0f)
 
-        val queryNorm = normalize(query)
+        val queryNorm = normalize(query.sanitized())
         var bestScore = -1.0f
         var bestId: String? = null
 
-        for (entry in vectors) {
+        for (entry in snapshot) {
             val score = cosineSimilarity(entry.vector, queryNorm)
-//            Log.d("VectorSearchEngine", "score: $score")
             if (score >= bestScore) {
                 bestScore = score
                 bestId = entry.id
             }
         }
 
-        return if (bestScore > 0.84f) Pair(bestId!!, bestScore) else Pair(null, bestScore)
+        return if (bestScore > MATCH_THRESHOLD) Pair(bestId, bestScore) else Pair(null, bestScore)
     }
 
     fun saveToFile(context: Context) {
-        val json = Json.encodeToString(vectors)
+        val json = Json.encodeToString(getAllEntries())
         File(context.filesDir, FILE_NAME).writeText(json)
     }
 
@@ -86,17 +87,11 @@ object VectorSearchEngine {
         if (file.exists()) {
             val json = file.readText()
             val restored = Json.decodeFromString<List<StoredFace>>(json)
-            vectors.clear()
-            vectors.addAll(restored)
+            synchronized(lock) {
+                vectors.clear()
+                vectors.addAll(restored.map { it.copy(vector = normalize(it.vector.sanitized())) })
+            }
         }
-    }
-
-    private fun cosineSimilarityFast(a: FloatArray, b: FloatArray): Double {
-        var dot = 0.0
-        for (i in a.indices) {
-            dot += a[i] * b[i]
-        }
-        return dot
     }
 
     fun cosineSimilarity(vec1: FloatArray, vec2: FloatArray): Float {
@@ -112,70 +107,90 @@ object VectorSearchEngine {
             normB += vec2[i] * vec2[i]           // vec2 的模长平方
         }
 
-        return if (normA == 0f || normB == 0f) 0f else dotProduct / (kotlin.math.sqrt(normA) * kotlin.math.sqrt(
-            normB
-        ))
+        return if (normA == 0f || normB == 0f) 0f else dotProduct / (sqrt(normA) * sqrt(normB))
     }
 
     fun normalize(vec: FloatArray): FloatArray {
-        val norm = sqrt(vec.map { it * it }.sum())
+        var sum = 0f
+        for (value in vec) {
+            if (value.isFinite()) {
+                sum += value * value
+            }
+        }
+        val norm = sqrt(sum)
         return if (norm == 0f || norm.isNaN()) {
             FloatArray(vec.size)
         } else {
-            vec.map { it / norm }.toFloatArray()
+            FloatArray(vec.size) { index ->
+                val value = vec[index]
+                if (value.isFinite()) value / norm else 0f
+            }
         }
     }
 
     fun getAllEntries(): List<StoredFace> {
-        return vectors.toList()
+        return synchronized(lock) {
+            vectors.map { it.copy(vector = it.vector.copyOf()) }
+        }
     }
 
+    fun getEntryById(id: String): StoredFace? {
+        return synchronized(lock) {
+            vectors.find { it.id == id }?.let { it.copy(vector = it.vector.copyOf()) }
+        }
+    }
+
+    @Deprecated("Use getEntryById instead.", ReplaceWith("getEntryById(id)"))
     fun getEntrieById(id: String): StoredFace? {
-        return vectors.find { it.id == id }
+        return getEntryById(id)
     }
 
     fun removeById(id: String) {
-        vectors.removeAll { it.id == id }
+        synchronized(lock) {
+            vectors.removeAll { it.id == id }
+        }
     }
 
     fun getVectorById(id: String): FloatArray? {
-        return vectors.find { it.id == id }?.vector
+        return getEntryById(id)?.vector
     }
 
     fun getNameById(id: String): String? {
-        return vectors.find { it.id == id }?.name
+        return getEntryById(id)?.name
     }
 
     fun updateName(faceId: String, newName: String) {
-        val vector = vectors.find { it.id == faceId }
-        if (vector != null) {
-            vector.name = newName
+        synchronized(lock) {
+            vectors.find { it.id == faceId }?.name = newName
         }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     fun updateVectors() {
         CoroutineScope(FaceNet.tfliteThread).launch {
-            for (face in vectors) {
-                val img_db = base64UrlToBitmap(face.imageUri)
-                if (img_db != null) {
-                    face.vector = FaceNet.getFaceEmbedding(img_db)
-                    Log.i(TAG,face.id)
+            for (face in getAllEntries()) {
+                val imageBitmap = base64UrlToBitmap(face.imageUri)
+                if (imageBitmap != null) {
+                    updateVector(face.id, FaceNet.getFaceEmbedding(imageBitmap))
+                    Log.i(TAG, face.id)
                 }
             }
         }
     }
 
     fun getCount(): Int {
-        return vectors.size
+        return synchronized(lock) {
+            vectors.size
+        }
     }
 
     fun exportVectorsJsonToDownloads(context: Context): String {
-        if (vectors.isEmpty()) {
+        val snapshot = getAllEntries()
+        if (snapshot.isEmpty()) {
             return "No vector data to export."
         }
         val jsonString = try {
-            Json.encodeToString(vectors)
+            Json.encodeToString(snapshot)
         } catch (e: Exception) {
             Log.e("VectorSearchEngine", "Error serializing vectors to JSON: ${e.message}", e)
             return "Error: Could not serialize data to JSON. ${e.localizedMessage}"
@@ -241,6 +256,20 @@ object VectorSearchEngine {
             } catch (deleteEx: Exception) { /* ignore */
             }
             "Error: An unexpected error occurred during export. ${e.localizedMessage}"
+        }
+    }
+
+    private fun updateVector(id: String, vector: FloatArray) {
+        val safeVector = normalize(vector.sanitized())
+        synchronized(lock) {
+            vectors.find { it.id == id }?.vector = safeVector
+        }
+    }
+
+    private fun FloatArray.sanitized(): FloatArray {
+        return FloatArray(size) { index ->
+            val value = this[index]
+            if (value.isNaN() || value.isInfinite()) 0f else value
         }
     }
 }

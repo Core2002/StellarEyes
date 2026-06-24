@@ -48,6 +48,7 @@ import `fun`.fifu.stellareyes.ui.settings.SettingsViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
+import java.util.Locale
 import kotlin.system.measureTimeMillis
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -107,6 +108,7 @@ fun FaceRecognitionResultUI(viewModel: FaceRecognitionViewModel, context: Contex
                     Text(
                         "Cosine Similarity ${
                             String.format(
+                                Locale.ROOT,
                                 "%.3f",
                                 state.cosineSimilarity
                             )
@@ -285,7 +287,7 @@ object FaceRecognitionViewModel : ViewModel() {
         val performInference = FaceNet.getFaceEmbedding(faceBitmap)
         val top1 = VectorSearchEngine.searchTop1(performInference)
         if (!top1.first.isNullOrEmpty()) {
-            val entre = VectorSearchEngine.getEntrieById(top1.first!!)
+            val entre = VectorSearchEngine.getEntryById(top1.first!!)
             if (entre != null) {
                 // Assuming base64UrlToBitmap is available for full Recognized state display
                 val img_db = base64UrlToBitmap(entre.imageUri)

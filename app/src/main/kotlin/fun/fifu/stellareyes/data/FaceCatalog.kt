@@ -18,6 +18,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import java.io.File
 import kotlinx.coroutines.runBlocking
 import `fun`.fifu.stellareyes.FaceNet
@@ -197,7 +198,7 @@ object FaceCatalogRepository {
     }
 
     fun syncVectorEntry(context: Context, id: String) {
-        val storedFace = VectorSearchEngine.getEntrieById(id) ?: return
+        val storedFace = VectorSearchEngine.getEntryById(id) ?: return
         val (items, fields) = load(context)
         if (items.any { it.id == id }) return
         val newItem = sanitizeItem(vectorToItem(storedFace))
@@ -209,10 +210,11 @@ object FaceCatalogRepository {
      * Creates StoredFace entries for catalog items that have avatar images
      * but no corresponding vector entry, then triggers vector recomputation.
      */
+    @OptIn(ExperimentalCoroutinesApi::class)
     fun syncCatalogToVectorStore(context: Context, items: List<FaceCatalogItem>) {
         var changed = false
         for (item in items) {
-            if (VectorSearchEngine.getEntrieById(item.id) != null) continue
+            if (VectorSearchEngine.getEntryById(item.id) != null) continue
             val avatarUrl = avatarValue(item) ?: continue
             val name = item.fields[KEY_NAME]?.asDisplayString().orEmpty()
             val timestamp = item.fields[KEY_TIMESTAMP]?.asNumberOrNull()?.toLong()

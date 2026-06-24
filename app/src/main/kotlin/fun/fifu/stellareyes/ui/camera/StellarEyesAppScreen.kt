@@ -20,8 +20,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ManageSearch
 import androidx.compose.material.icons.filled.FlipCameraAndroid
-import androidx.compose.material.icons.filled.ManageSearch
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Portrait
@@ -36,6 +36,8 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -83,7 +85,7 @@ fun StellarEyesAppScreen(navController: NavHostController, viewModel: SettingsVi
     var detectedFaces by remember { mutableStateOf<List<Face>>(emptyList()) }
     var imageAnalysisConfiguredSize by remember { mutableStateOf(Size(0, 0)) }
     var previewViewSizePx by remember { mutableStateOf(IntSize.Zero) }
-    var lensFacing by remember { mutableStateOf(CameraSelector.LENS_FACING_BACK) }
+    var lensFacing by remember { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
 
     // Define the desired scale type for the PreviewView
     val previewScaleType = PreviewView.ScaleType.FIT_CENTER
@@ -111,7 +113,7 @@ fun StellarEyesAppScreen(navController: NavHostController, viewModel: SettingsVi
 
     val snackbarHostState = remember { SnackbarHostState() }
     var showImportProgress by remember { mutableStateOf(false) }
-    var importProgress by remember { mutableStateOf(0f) }
+    var importProgress by remember { mutableFloatStateOf(0f) }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents(),
@@ -199,7 +201,7 @@ fun StellarEyesAppScreen(navController: NavHostController, viewModel: SettingsVi
                         navController.navigate("manage_faces_screen_route")
                     }) {
                         Icon(
-                            imageVector = Icons.Filled.ManageSearch,
+                            imageVector = Icons.AutoMirrored.Filled.ManageSearch,
                             contentDescription = "管理人脸数据"
                         )
                     }

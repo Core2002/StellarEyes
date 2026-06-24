@@ -161,7 +161,7 @@ class ManageFacesViewModel(application: Application) : AndroidViewModel(applicat
 
     private fun syncVectorName(item: FaceCatalogItem) {
         val name = item.fields["name"]?.asDisplayString()?.takeIf { it.isNotBlank() } ?: return
-        if (VectorSearchEngine.getEntrieById(item.id) != null) {
+        if (VectorSearchEngine.getEntryById(item.id) != null) {
             VectorSearchEngine.updateName(item.id, name)
             VectorSearchEngine.saveToFile(getApplication())
         }

@@ -3,6 +3,7 @@ package `fun`.fifu.stellareyes.ui.managefaces
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.net.toUri
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -617,7 +618,7 @@ private fun CatalogAvatar(url: String?, title: String, size: Dp = 88.dp, preview
     val bitmap = remember(url) {
         when {
             url?.startsWith("data:image/", ignoreCase = true) == true -> base64UrlToBitmap(url)
-            url?.startsWith("content://", ignoreCase = true) == true -> uriToBitmap(context, Uri.parse(url))
+            url?.startsWith("content://", ignoreCase = true) == true -> uriToBitmap(context, url.toUri())
             else -> null
         }
     }

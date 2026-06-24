@@ -2,7 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.compose.compiler)
-    kotlin("plugin.serialization") version "1.9.22"
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -45,8 +45,10 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-    kotlinOptions {
-        jvmTarget = "11"
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+        }
     }
 
     externalNativeBuild {
@@ -58,27 +60,41 @@ android {
         jniLibs {
 //            useLegacyPackaging = true
         }
+        resources {
+            excludes += setOf(
+                "META-INF/INDEX.LIST",
+                "META-INF/io.netty.versions.properties"
+            )
+        }
     }
-    packagingOptions {
-        exclude("META-INF/INDEX.LIST")
-        exclude("META-INF/io.netty.versions.properties")
+
+    lint {
+        abortOnError = true
+        checkDependencies = true
+        checkReleaseBuilds = true
+        warningsAsErrors = true
+        disable += setOf(
+            "AndroidGradlePluginVersion",
+            "Aligned16KB",
+            "GradleDependency",
+            "NewerVersionAvailable"
+        )
     }
 }
 
-dependencies {    // ... other dependencies
+dependencies {
     implementation(libs.google.accompanist.permissions)
-// Check for the latest version
-    implementation(libs.androidx.ui) // Or the latest version
-    implementation(libs.androidx.material3) // Or the latest version for Material Design 3
-    implementation(libs.androidx.ui.tooling.preview) // Or the latest version
-    androidTestImplementation(libs.androidx.ui.test.junit4) // Or the latest version
-    debugImplementation(libs.androidx.ui.tooling) // Or the latest version
-    debugImplementation(libs.androidx.ui.test.manifest) // Or the latest version
-    implementation(libs.androidx.material.icons.core) // Or the latest version
-    implementation(libs.androidx.material.icons.extended) // For more icons
-    implementation("androidx.datastore:datastore-preferences:1.1.7")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
-    implementation("io.coil-kt:coil-compose:2.7.0")
+    implementation(libs.androidx.ui)
+    implementation(libs.androidx.material3)
+    implementation(libs.androidx.ui.tooling.preview)
+    androidTestImplementation(libs.androidx.ui.test.junit4)
+    debugImplementation(libs.androidx.ui.tooling)
+    debugImplementation(libs.androidx.ui.test.manifest)
+    implementation(libs.androidx.material.icons.core)
+    implementation(libs.androidx.material.icons.extended)
+    implementation(libs.datastore.preferences)
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.coil.compose)
 
     // TensorFlow Lite dependencies
     implementation(libs.tensorflow.lite)
@@ -86,13 +102,12 @@ dependencies {    // ... other dependencies
     implementation(libs.tensorflow.lite.gpu.api)
     implementation(libs.tensorflow.lite.support)
 
-    // For ViewModel and LiveData integration (optional but common)
-    implementation(libs.androidx.lifecycle.viewmodel.compose) // Or the latest version
-    implementation(libs.androidx.runtime.livedata) // Or the latest version
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.runtime.livedata)
     implementation(libs.androidx.glance.appwidget)
     implementation(libs.capturable)
-    // For Navigation (optional)
-    implementation(libs.androidx.navigation.compose) // Or the latest version
+    implementation(libs.androidx.navigation.compose)
 
     implementation(libs.face.detection)
     implementation(libs.play.services.mlkit.face.detection)
@@ -101,7 +116,6 @@ dependencies {    // ... other dependencies
     implementation(libs.firebase.firestore.ktx)
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
-    implementation(libs.litert)
     implementation(libs.guava)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
@@ -110,6 +124,4 @@ dependencies {    // ... other dependencies
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 
-    implementation(libs.vertx.core)
-    implementation(libs.vertx.web)
 }

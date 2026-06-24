@@ -12,11 +12,9 @@ import android.graphics.Rect
 import android.graphics.YuvImage
 import android.media.MediaScannerConnection
 import android.net.Uri
-import android.os.Build
 import android.provider.MediaStore
 import android.util.Log
 import android.view.View
-import androidx.annotation.RequiresApi
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.ImageProxy
@@ -31,7 +29,6 @@ import java.util.concurrent.Executor
 // Make sure TAG is defined in your class/file
 private const val TAG = "ScreenShotUtil"
 
-@RequiresApi(Build.VERSION_CODES.KITKAT)
 fun createBitmapFromView(view: View, window: android.view.Window?): Bitmap? {
     if (view.width <= 0 || view.height <= 0) {
         Log.e(TAG, "View has no dimensions (width or height is 0). Cannot create bitmap.")
@@ -108,7 +105,6 @@ private fun drawViewOnCanvas(view: View, canvas: Canvas) {
 }
 
 
-@RequiresApi(Build.VERSION_CODES.FROYO)
 private fun imageProxyToBitmap(image: ImageProxy): Bitmap? {
     if (image.format == ImageFormat.JPEG) {
         val buffer = image.planes[0].buffer
@@ -236,7 +232,6 @@ fun captureAndSaveImage(context: Context, imageCapture: ImageCapture) {
         ImageCapture.OutputFileOptions.Builder(outputStream).build(),
         CameraXExecutors.mainThreadExecutor(),
         object : ImageCapture.OnImageSavedCallback {
-            @RequiresApi(Build.VERSION_CODES.FROYO)
             override fun onImageSaved(output: ImageCapture.OutputFileResults) {
                 Log.d(TAG, "Image saved callback triggered")
 
@@ -298,7 +293,6 @@ fun captureImageToBitmap(
     imageCapture.takePicture(
         executor, // Executor for the callback
         object : ImageCapture.OnImageCapturedCallback() {
-            @RequiresApi(Build.VERSION_CODES.FROYO)
             override fun onCaptureSuccess(image: ImageProxy) {
                 Log.d(TAG, "Image capture success. Format: ${image.format}")
                 val bitmap = imageProxyToBitmap(image) // imageProxyToBitmap will close the image

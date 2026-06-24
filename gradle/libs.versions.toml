@@ -7,17 +7,19 @@ glanceAppwidget = "1.1.1"
 guava = "33.4.8-android"
 kotlin = "2.2.0"
 coreKtx = "1.16.0"
+coilCompose = "2.7.0"
+datastorePreferences = "1.1.7"
 junit = "4.13.2"
 junitVersion = "1.2.1"
 espressoCore = "3.6.1"
 appcompat = "1.7.1"
 lifecycleViewmodelCompose = "2.9.1"
-litert = "1.4.0"
 material = "1.12.0"
 material3 = "1.3.2"
 materialIconsExtended = "1.7.8"
 navigationCompose = "2.9.1"
 playServicesMlkitFaceDetection = "17.1.0"
+kotlinxSerializationJson = "1.9.0"
 cameraCore = "1.4.2"
 firebaseFirestoreKtx = "25.1.4"
 cameraLifecycle = "1.4.2"
@@ -26,8 +28,6 @@ runtimeLivedata = "1.8.3"
 ui = "1.8.3"
 tensorflow-lite = "2.17.0"
 tensorflow-lite-support = "0.5.0"
-vertxCore = "5.0.5"
-vertxWeb = "5.0.5"
 
 [libraries]
 # TensorFlow Lite
@@ -41,6 +41,7 @@ androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.r
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-glance-appwidget = { module = "androidx.glance:glance-appwidget", version.ref = "glanceAppwidget" }
 androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycleViewmodelCompose" }
+androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycleViewmodelCompose" }
 androidx-material-icons-core = { module = "androidx.compose.material:material-icons-core", version.ref = "materialIconsExtended" }
 androidx-material-icons-extended = { module = "androidx.compose.material:material-icons-extended", version.ref = "materialIconsExtended" }
 androidx-material3 = { module = "androidx.compose.material3:material3", version.ref = "material3" }
@@ -52,23 +53,23 @@ androidx-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest", v
 androidx-ui-tooling = { module = "androidx.compose.ui:ui-tooling", version.ref = "ui" }
 androidx-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview", version.ref = "ui" }
 capturable = { module = "dev.shreyaspatil:capturable", version.ref = "capturable" }
+coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coilCompose" }
+datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastorePreferences" }
 face-detection = { module = "com.google.mlkit:face-detection", version.ref = "faceDetection" }
 guava = { module = "com.google.guava:guava", version.ref = "guava" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
-litert = { module = "com.google.ai.edge.litert:litert", version.ref = "litert" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 play-services-mlkit-face-detection = { group = "com.google.android.gms", name = "play-services-mlkit-face-detection", version.ref = "playServicesMlkitFaceDetection" }
 androidx-camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "cameraCore" }
 firebase-firestore-ktx = { group = "com.google.firebase", name = "firebase-firestore-ktx", version.ref = "firebaseFirestoreKtx" }
 androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "cameraLifecycle" }
 androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "cameraView" }
-vertx-web = { module = "io.vertx:vertx-web", version.ref = "vertxWeb" }
-vertx-core = { module = "io.vertx:vertx-core", version.ref = "vertxCore" }
-
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

@@ -183,11 +183,6 @@ fun AboutScreen(
                 description = "A Jetpack Compose utility to capture Composable content as Bitmap.",
                 url = "https://github.com/PatilShreyas/Capturable" // Assuming this is the lib
             ),
-            LibraryItem( // libs.litert
-                name = "Google AI Edge Lite Runtime",
-                description = "Runtime for executing TensorFlow Lite models on edge devices.",
-                url = "https://developers.google.com/ml-kit/tflite-support" // Related, actual lib might be harder to link directly
-            ),
             LibraryItem( // libs.guava
                 name = "Google Guava",
                 description = "Google core libraries for Java/Android.",
@@ -229,7 +224,7 @@ fun AboutScreen(
         ) {
             // 应用图标
             Image(
-                painter = painterResource(id = R.drawable.app_display_icon),
+                painter = painterResource(id = R.mipmap.ic_launcher_foreground),
                 contentDescription = stringResource(id = R.string.app_icon_content_description),
                 modifier = Modifier
                     .size(100.dp)
