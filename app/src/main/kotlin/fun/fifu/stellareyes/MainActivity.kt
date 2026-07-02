@@ -66,6 +66,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         cameraExecutor = Executors.newSingleThreadExecutor()
 
+        // FaceNet 初始化
+        lifecycleScope.launch(Dispatchers.IO) {
+            FaceNet.initFaceNet(applicationContext)
+        }
+
         // NCNN 初始化
         lifecycleScope.launch(Dispatchers.IO) {
             val ok = ncnnController.setupNcnn(assets)
@@ -73,7 +78,9 @@ class MainActivity : ComponentActivity() {
         }
 
         checkCameraPermissionAndSetup()
-        VectorSearchEngine.loadFromFile(this)
+        lifecycleScope.launch(Dispatchers.IO) {
+            VectorSearchEngine.loadFromFile(this@MainActivity)
+        }
     }
 
     private fun checkCameraPermissionAndSetup() {

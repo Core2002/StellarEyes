@@ -19,8 +19,8 @@ import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.withContext
 import java.io.File
-import kotlinx.coroutines.runBlocking
 import `fun`.fifu.stellareyes.FaceNet
 import `fun`.fifu.stellareyes.ui.camera.base64UrlToBitmap
 
@@ -93,7 +93,8 @@ object FaceCatalogRepository {
         }
 
         return runCatching {
-            val store = json.decodeFromString<FaceCatalogStore>(file.readText())
+            val content = file.readText()
+            val store = json.decodeFromString<FaceCatalogStore>(content)
             store.items.map { sanitizeItem(it) } to defaultCatalogFields
         }.getOrElse {
             emptyList<FaceCatalogItem>() to defaultCatalogFields
@@ -211,7 +212,7 @@ object FaceCatalogRepository {
      * but no corresponding vector entry, then triggers vector recomputation.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun syncCatalogToVectorStore(context: Context, items: List<FaceCatalogItem>) {
+    suspend fun syncCatalogToVectorStore(context: Context, items: List<FaceCatalogItem>) {
         var changed = false
         for (item in items) {
             if (VectorSearchEngine.getEntryById(item.id) != null) continue
@@ -219,7 +220,7 @@ object FaceCatalogRepository {
             val name = item.fields[KEY_NAME]?.asDisplayString().orEmpty()
             val timestamp = item.fields[KEY_TIMESTAMP]?.asNumberOrNull()?.toLong()
                 ?: System.currentTimeMillis()
-            val vector = runBlocking(FaceNet.tfliteThread) {
+            val vector = withContext(FaceNet.tfliteThread) {
                 val bitmap = base64UrlToBitmap(avatarUrl)
                 if (bitmap != null) FaceNet.getFaceEmbedding(bitmap) else FloatArray(512)
             }
@@ -308,5 +309,3 @@ fun JsonElement.isImageLike(): Boolean {
         value.endsWith(".webp") ||
         value.endsWith(".svg")
 }
-
-

@@ -25,12 +25,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.Face
 import com.google.mlkit.vision.face.FaceDetector
-import `fun`.fifu.stellareyes.FaceNet
 import `fun`.fifu.stellareyes.captureImageToBitmap
 import `fun`.fifu.stellareyes.ui.settings.SettingsViewModel
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.launch
 import java.util.concurrent.ExecutorService
 import androidx.camera.core.Preview as CameraXPreview
 
@@ -48,7 +45,8 @@ fun CameraPreview(
     imageCapture: ImageCapture,
     onFacesDetected: (faces: List<Face>, width: Int, height: Int) -> Unit,
     viewModel: SettingsViewModel,
-    onCaptureProcessed: (() -> Unit)? = null // 可选回调
+    faceRecognitionViewModel: FaceRecognitionViewModel,
+    onCaptureProcessed: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -57,16 +55,8 @@ fun CameraPreview(
         PreviewView(context).apply { this.scaleType = scaleType }
     }
 
-    // 初始化 FaceNet
-    LaunchedEffect(Unit) {
-        CoroutineScope(FaceNet.tfliteThread).launch {
-            FaceNet.initFaceNet(context, false)
-        }
-    }
-
     val lastCaptureTime = remember { mutableLongStateOf(0L) }
 
-    // CameraX 绑定
     LaunchedEffect(lensFacing, scaleType) {
         val cameraProvider = ProcessCameraProvider.getInstance(context).get()
 
@@ -92,6 +82,7 @@ fun CameraPreview(
                         imageCapture,
                         context,
                         viewModel,
+                        faceRecognitionViewModel,
                         lastCaptureTime
                     )
                 }
@@ -126,6 +117,7 @@ private fun processImageProxy(
     imageCapture: ImageCapture,
     context: Context,
     viewModel: SettingsViewModel,
+    faceRecognitionViewModel: FaceRecognitionViewModel,
     lastCaptureTime: MutableState<Long>
 ) {
     val mediaImage = imageProxy.image ?: return imageProxy.close()
@@ -151,14 +143,16 @@ private fun processImageProxy(
                     captureImageToBitmap(context, imageCapture) { capturedBitmap, error ->
                         if (capturedBitmap != null) {
                             val capturedImage = InputImage.fromBitmap(capturedBitmap, 0)
+                            // Optimization: We could potentially skip this second detection if we transform bounding boxes correctly,
+                            // but for now, we at least fixed the ViewModel singleton usage.
                             faceDetector.process(capturedImage)
                                 .addOnSuccessListener { detectedFaces ->
                                     if (viewModel.isProcessAllFacesEnabled.value) {
-                                        FaceRecognitionViewModel.processAllFaces(
+                                        faceRecognitionViewModel.processAllFaces(
                                             detectedFaces, capturedImage, context, viewModel
                                         )
                                     } else {
-                                        FaceRecognitionViewModel.processLargestFace(
+                                        faceRecognitionViewModel.processLargestFace(
                                             detectedFaces, capturedImage, context, viewModel
                                         )
                                     }
@@ -178,4 +172,3 @@ private fun processImageProxy(
             imageProxy.close()
         }
 }
-
