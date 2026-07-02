@@ -8,6 +8,8 @@ import android.util.Log
 import androidx.core.graphics.get
 import androidx.core.graphics.scale
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.tensorflow.lite.DataType
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.gpu.CompatibilityList
@@ -41,32 +43,42 @@ object FaceNet {
         .add(StandardizeOp())
         .build()
 
+    private var isInitialized = false
+    private val initMutex = Mutex()
+
     suspend fun initFaceNet(context: Context, useGpu: Boolean = true, useXNNPack: Boolean = true) {
-        withContext(tfliteThread) {
-            val options = Interpreter.Options().apply {
-                useXNNPACK = useXNNPack
-                useNNAPI = true
-                if (useGpu) {
-                    try {
-                        val compatList = CompatibilityList()
-                        if (compatList.isDelegateSupportedOnThisDevice) {
-                            gpuDelegate = GpuDelegate(compatList.bestOptionsForThisDevice)
-                            addDelegate(gpuDelegate)
-                            Log.d(TAG, "GPU delegate enabled")
+        initMutex.withLock {
+            if (isInitialized) return@withLock
+            withContext(tfliteThread) {
+                val options = Interpreter.Options().apply {
+                    useXNNPACK = useXNNPack
+                    useNNAPI = true
+                    if (useGpu) {
+                        try {
+                            val compatList = CompatibilityList()
+                            if (compatList.isDelegateSupportedOnThisDevice) {
+                                gpuDelegate = GpuDelegate(compatList.bestOptionsForThisDevice)
+                                addDelegate(gpuDelegate)
+                                Log.d(TAG, "GPU delegate enabled")
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "GPU delegate init failed, fallback to CPU", e)
                         }
-                    } catch (e: Exception) {
-                        Log.w(TAG, "GPU delegate init failed, fallback to CPU", e)
+                    } else {
+                        numThreads = 4
                     }
-                } else {
-                    numThreads = 4
                 }
+                interpreter = Interpreter(FileUtil.loadMappedFile(context, MODEL_FILENAME), options)
+                isInitialized = true
+                Log.d(TAG, "Interpreter initialized")
             }
-            interpreter = Interpreter(FileUtil.loadMappedFile(context, MODEL_FILENAME), options)
-            Log.d(TAG, "Interpreter initialized")
         }
     }
 
     suspend fun getFaceEmbedding(image: Bitmap): FloatArray {
+        if (!isInitialized) {
+            error("FaceNet is not initialized. Call initFaceNet first.")
+        }
         return withContext(tfliteThread) {
             runFaceNet(convertBitmapToBuffer(image))[0]
         }

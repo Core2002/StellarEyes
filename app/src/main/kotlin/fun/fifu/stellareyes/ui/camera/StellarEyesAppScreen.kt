@@ -50,6 +50,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.Face
@@ -64,6 +65,7 @@ import `fun`.fifu.stellareyes.saveBitmapToMediaStore
 import `fun`.fifu.stellareyes.ui.settings.SettingsViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.util.concurrent.Executors
 
 private const val TAG = "StellarEyesAppScreen"
@@ -76,6 +78,10 @@ fun StellarEyesAppScreen(navController: NavHostController, viewModel: SettingsVi
     val captureController = rememberCaptureController()
     val scope = rememberCoroutineScope()
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
+    
+    // Scoped ViewModel
+    val faceRecognitionViewModel: FaceRecognitionViewModel = viewModel()
+
     DisposableEffect(Unit) {
         onDispose {
             cameraExecutor.shutdown()
@@ -87,7 +93,6 @@ fun StellarEyesAppScreen(navController: NavHostController, viewModel: SettingsVi
     var previewViewSizePx by remember { mutableStateOf(IntSize.Zero) }
     var lensFacing by remember { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
 
-    // Define the desired scale type for the PreviewView
     val previewScaleType = PreviewView.ScaleType.FIT_CENTER
 
     val faceDetector = remember {
@@ -107,7 +112,7 @@ fun StellarEyesAppScreen(navController: NavHostController, viewModel: SettingsVi
     }
     val imageCapture = remember {
         ImageCapture.Builder()
-            .setFlashMode(ImageCapture.FLASH_MODE_OFF) // Or FLASH_MODE_ON, FLASH_MODE_OFF
+            .setFlashMode(ImageCapture.FLASH_MODE_OFF)
             .build()
     }
 
@@ -118,32 +123,25 @@ fun StellarEyesAppScreen(navController: NavHostController, viewModel: SettingsVi
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents(),
         onResult = { uris: List<Uri> ->
-            Log.d(TAG, "Image picker result received. URI count: ${uris.size}")
             if (uris.isNotEmpty()) {
-                Log.d(TAG, "URIs are not empty, launching import job.")
                 scope.launch {
-                    Log.d(TAG, "Coroutine for import started.") // 新增日志
                     showImportProgress = true
                     importProgress = 0f
                     try {
-                        importFacesFromUris(uris, context, faceDetector) { progress ->
+                        importFacesFromUris(uris, context, faceDetector, faceRecognitionViewModel) { progress ->
                             importProgress = progress
                         }
-                        Log.d(TAG, "importFacesFromUris completed.") // 新增日志
                         snackbarHostState.showSnackbar("${uris.size} 张图片已选择，导入完成。")
-                        Log.d(TAG, "Import job launched and Snackbar shown for non-empty URIs.")
                     } catch (e: Exception) {
-                        Log.e(TAG, "Error during import process in coroutine", e) // 捕获并记录异常
+                        Log.e(TAG, "Error during import process", e)
                         snackbarHostState.showSnackbar("导入失败: ${e.localizedMessage}")
                     } finally {
                         showImportProgress = false
                     }
                 }
             } else {
-                Log.d(TAG, "URIs are empty.")
                 scope.launch {
                     snackbarHostState.showSnackbar("没有选择图片。")
-                    Log.d(TAG, "Snackbar shown for empty URIs.")
                 }
             }
         }
@@ -152,12 +150,12 @@ fun StellarEyesAppScreen(navController: NavHostController, viewModel: SettingsVi
     Scaffold(
         bottomBar = {
             BottomAppBar(
-                modifier = Modifier.height(52.dp) // 在这里设置您想要的高度，例如 52.dp
+                modifier = Modifier.height(52.dp)
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(), // 让 Row 填充整个宽度
-                    horizontalArrangement = Arrangement.SpaceAround, // 或 Arrangement.Center，根据您的偏好选择
-                    verticalAlignment = Alignment.CenterVertically // 确保图标在垂直方向上也居中
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceAround,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = {
                         lensFacing = if (lensFacing == CameraSelector.LENS_FACING_BACK) {
@@ -178,7 +176,6 @@ fun StellarEyesAppScreen(navController: NavHostController, viewModel: SettingsVi
                             try {
                                 val capturedFaceBitmap = bitmapAsync.await().asAndroidBitmap()
                                 saveBitmapToMediaStore(context, capturedFaceBitmap, "awa")
-                                // Do something with `bitmap`.
                             } catch (error: Throwable) {
                                 error.printStackTrace()
                             }
@@ -212,14 +209,14 @@ fun StellarEyesAppScreen(navController: NavHostController, viewModel: SettingsVi
                             faceDetector.process(inputImage)
                                 .addOnSuccessListener { faces ->
                                     if (viewModel.isProcessAllFacesEnabled.value) {
-                                        FaceRecognitionViewModel.processAllFaces(
+                                        faceRecognitionViewModel.processAllFaces(
                                             faces,
                                             inputImage,
                                             context,
                                             viewModel
                                         )
                                     } else {
-                                        FaceRecognitionViewModel.processLargestFace(
+                                        faceRecognitionViewModel.processLargestFace(
                                             faces,
                                             inputImage,
                                             context,
@@ -261,19 +258,18 @@ fun StellarEyesAppScreen(navController: NavHostController, viewModel: SettingsVi
                     .fillMaxSize()
                     .onSizeChanged { size ->
                         previewViewSizePx = size
-                        // Log.d(TAG, "PreviewView Composable size updated: ${size.width}x${size.height}") // Keep for debugging if needed
                     },
                 executor = cameraExecutor,
                 faceDetector = faceDetector,
                 lensFacing = lensFacing,
-                scaleType = previewScaleType, // Pass the scale type to CameraPreview
+                scaleType = previewScaleType,
                 imageCapture = imageCapture,
                 onFacesDetected = { faces, analysisWidth, analysisHeight ->
                     detectedFaces = faces
                     imageAnalysisConfiguredSize = Size(analysisWidth, analysisHeight)
-                    // Log.d(TAG, "FaceBoundingBoxOverlay IS USING Analysis Size: ${analysisWidth}x${analysisHeight}") // Keep for debugging
                 },
-                viewModel = viewModel
+                viewModel = viewModel,
+                faceRecognitionViewModel = faceRecognitionViewModel
             )
 
             if (detectedFaces.isNotEmpty() && imageAnalysisConfiguredSize.width > 0 && imageAnalysisConfiguredSize.height > 0 && previewViewSizePx.width > 0 && previewViewSizePx.height > 0) {
@@ -289,60 +285,44 @@ fun StellarEyesAppScreen(navController: NavHostController, viewModel: SettingsVi
             }
             if (showImportProgress) {
                 LinearProgressIndicator(
-                    progress = { importProgress }, // Ensure this is a lambda returning the state value
+                    progress = { importProgress },
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         .fillMaxWidth()
                         .padding(8.dp)
                 )
             }
-            FaceRecognitionScreen(viewModel = FaceRecognitionViewModel, context = context)
+            FaceRecognitionScreen(viewModel = faceRecognitionViewModel, context = context)
         }
     }
 }
 
-// Assume this function is in the same file or imported correctly
-fun importFacesFromUris(
+suspend fun importFacesFromUris(
     uris: List<Uri>,
     context: Context,
     faceDetector: FaceDetector,
-    onProgress: (Float) -> Unit // Callback to update progress
+    recognitionViewModel: FaceRecognitionViewModel,
+    onProgress: (Float) -> Unit
 ) {
-    Log.d(TAG, "importFacesFromUris started with ${uris.size} URIs.")
     uris.forEachIndexed { index, uri ->
-        Log.d(TAG, "Processing URI ${index + 1}: $uri")
-        val uriBitmap = uriToBitmap(context, uri) // Assume uriToBitmap is defined elsewhere
+        val uriBitmap = uriToBitmap(context, uri)
         if (uriBitmap == null) {
-            Log.w(TAG, "Failed to convert URI to Bitmap: $uri")
-            // Update progress even if an item fails, or decide how to handle partial failures
             onProgress((index + 1).toFloat() / uris.size)
-            return@forEachIndexed // Continue with the next URI
+            return@forEachIndexed
         }
-        Log.d(TAG, "Bitmap created successfully for URI: $uri")
         val inputImage = InputImage.fromBitmap(uriBitmap, 0)
 
-        Log.i(TAG, "读取到 批量输入 - Calling faceDetector.process for URI: $uri")
-        faceDetector.process(inputImage)
-            .addOnSuccessListener { faces ->
-                Log.i(TAG, "Face detection success for URI: $uri. Found ${faces.size} faces.")
-                FaceRecognitionViewModel.processPicFace( // Assume FaceRecognitionViewModel is accessible
-                    faces,
-                    inputImage,
-                    context
-                )
-                Log.i(TAG, "processPicFace called for URI: $uri")
-            }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "Face detection failed for URI: $uri. Error: ${e.message}", e)
-            }
-            .addOnCompleteListener { // This will be called after success or failure
-                Log.d(
-                    TAG,
-                    "Face detection task completed for URI: $uri. Success: ${it.isSuccessful}"
-                )
-                // Update progress after each item is processed
-                onProgress((index + 1).toFloat() / uris.size)
-            }
+        try {
+            val faces = faceDetector.process(inputImage).await()
+            recognitionViewModel.processPicFace(
+                faces,
+                inputImage,
+                context
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Face detection failed for URI: $uri", e)
+        } finally {
+            onProgress((index + 1).toFloat() / uris.size)
+        }
     }
-    Log.d(TAG, "importFacesFromUris finished.")
 }

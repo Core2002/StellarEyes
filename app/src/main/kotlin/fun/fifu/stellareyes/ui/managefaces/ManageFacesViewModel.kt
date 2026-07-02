@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 
@@ -52,12 +53,16 @@ class ManageFacesViewModel(application: Application) : AndroidViewModel(applicat
     }
 
    fun reload() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val (items, fields) = FaceCatalogRepository.load(getApplication())
-            val reconciled = FaceCatalogRepository.reconcileWithVectors(items)
-            val cleanItems = reconciled.map { FaceCatalogRepository.sanitizeItem(it) }
-            FaceCatalogRepository.save(getApplication(), cleanItems, fields)
-            _uiState.value = ManageFacesUiState(items = cleanItems, fields = FaceCatalogRepository.defaultCatalogFields, loading = false)
+        viewModelScope.launch {
+            _uiState.update { it.copy(loading = true) }
+            val (items, _) = withContext(Dispatchers.IO) {
+                val loaded = FaceCatalogRepository.load(getApplication())
+                val reconciled = FaceCatalogRepository.reconcileWithVectors(loaded.first)
+                val cleanItems = reconciled.map { FaceCatalogRepository.sanitizeItem(it) }
+                FaceCatalogRepository.save(getApplication(), cleanItems, loaded.second)
+                cleanItems to loaded.second
+            }
+            _uiState.value = ManageFacesUiState(items = items, fields = FaceCatalogRepository.defaultCatalogFields, loading = false)
         }
     }
 
@@ -74,26 +79,33 @@ class ManageFacesViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun saveItem(itemId: String?, values: Map<String, JsonElement>) {
-        val id = itemId ?: values["id"]?.asDisplayString()?.takeIf { it.isNotBlank() }
-            ?: System.currentTimeMillis().toString()
-        _uiState.update { state ->
-            val previous = state.items.firstOrNull { it.id == itemId }
-            val item = FaceCatalogRepository.sanitizeItem(
-                FaceCatalogItem(
-                    id,
-                    previous.orEmptyFields()
-                        .plus(values)
-                        .plus("id" to JsonPrimitive(id))
+        viewModelScope.launch {
+            val id = itemId ?: values["id"]?.asDisplayString()?.takeIf { it.isNotBlank() }
+                ?: System.currentTimeMillis().toString()
+            
+            _uiState.update { state ->
+                val previous = state.items.firstOrNull { it.id == itemId }
+                val item = FaceCatalogRepository.sanitizeItem(
+                    FaceCatalogItem(
+                        id,
+                        previous.orEmptyFields()
+                            .plus(values)
+                            .plus("id" to JsonPrimitive(id))
+                    )
                 )
-            )
-            val nextItems = if (itemId == null) {
-                state.items + item
-            } else {
-                state.items.map { if (it.id == itemId) item else it }
+                val nextItems = if (itemId == null) {
+                    state.items + item
+                } else {
+                    state.items.map { if (it.id == itemId) item else it }
+                }
+                
+                viewModelScope.launch(Dispatchers.IO) {
+                    syncVectorName(item)
+                    persist(nextItems, FaceCatalogRepository.defaultCatalogFields)
+                }
+                
+                state.copy(items = nextItems, fields = FaceCatalogRepository.defaultCatalogFields, message = "已保存")
             }
-            syncVectorName(item)
-            persist(nextItems, FaceCatalogRepository.defaultCatalogFields)
-            state.copy(items = nextItems, fields = FaceCatalogRepository.defaultCatalogFields, message = "已保存")
         }
     }
 
@@ -101,56 +113,75 @@ class ManageFacesViewModel(application: Application) : AndroidViewModel(applicat
         _uiState.update { state ->
             val nextItems = state.items.map { item ->
                 if (item.id == itemId) {
-                    FaceCatalogRepository.sanitizeItem(item.copy(fields = item.fields.plus(fieldKey to value))).also { updated ->
-                        syncVectorName(updated)
-                    }
+                    FaceCatalogRepository.sanitizeItem(item.copy(fields = item.fields.plus(fieldKey to value)))
                 } else {
                     item
                 }
             }
-            persist(nextItems, FaceCatalogRepository.defaultCatalogFields)
+            
+            val updatedItem = nextItems.find { it.id == itemId }
+            if (updatedItem != null) {
+                viewModelScope.launch(Dispatchers.IO) {
+                    syncVectorName(updatedItem)
+                    persist(nextItems, FaceCatalogRepository.defaultCatalogFields)
+                }
+            }
+            
             state.copy(items = nextItems, message = "已更新")
         }
     }
 
     fun deleteItem(itemId: String) {
-        _uiState.update { state ->
-            val nextItems = state.items.filterNot { it.id == itemId }
-            VectorSearchEngine.removeById(itemId)
-            VectorSearchEngine.saveToFile(getApplication())
-            persist(nextItems, FaceCatalogRepository.defaultCatalogFields)
-            state.copy(items = nextItems, message = "已删除")
+        viewModelScope.launch {
+            _uiState.update { state ->
+                val nextItems = state.items.filterNot { it.id == itemId }
+                viewModelScope.launch(Dispatchers.IO) {
+                    VectorSearchEngine.removeById(itemId)
+                    VectorSearchEngine.saveToFile(getApplication())
+                    persist(nextItems, FaceCatalogRepository.defaultCatalogFields)
+                }
+                state.copy(items = nextItems, message = "已删除")
+            }
         }
     }
 
     fun saveFields(fields: List<CatalogFieldConfig>) {
-        _uiState.update { state ->
-            persist(state.items, FaceCatalogRepository.defaultCatalogFields)
-            state.copy(fields = FaceCatalogRepository.defaultCatalogFields, message = "字段配置已固定")
+        viewModelScope.launch(Dispatchers.IO) {
+            persist(_uiState.value.items, FaceCatalogRepository.defaultCatalogFields)
+            _uiState.update { it.copy(fields = FaceCatalogRepository.defaultCatalogFields, message = "字段配置已固定") }
         }
     }
 
     fun importJson(uri: Uri, mode: ImportMode) {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(loading = true) }
             runCatching {
-            val raw = FaceCatalogRepository.readTextFromUri(getApplication(), uri)
-            val imported = FaceCatalogRepository.parseItems(raw)
-            FaceCatalogRepository.syncCatalogToVectorStore(getApplication(), imported)
-            _uiState.update { state ->
+                val imported = withContext(Dispatchers.IO) {
+                    val raw = FaceCatalogRepository.readTextFromUri(getApplication(), uri)
+                    val parsed = FaceCatalogRepository.parseItems(raw)
+                    FaceCatalogRepository.syncCatalogToVectorStore(getApplication(), parsed)
+                    parsed
+                }
+                
+                _uiState.update { state ->
                     val nextItems = FaceCatalogRepository.applyImport(state.items, imported, mode)
                         .map { FaceCatalogRepository.sanitizeItem(it) }
-                    persist(nextItems, FaceCatalogRepository.defaultCatalogFields)
-                    state.copy(items = nextItems, fields = FaceCatalogRepository.defaultCatalogFields, message = "已导入 ${imported.size} 条数据")
+                    viewModelScope.launch(Dispatchers.IO) {
+                        persist(nextItems, FaceCatalogRepository.defaultCatalogFields)
+                    }
+                    state.copy(items = nextItems, fields = FaceCatalogRepository.defaultCatalogFields, message = "已导入 ${imported.size} 条数据", loading = false)
                 }
             }.getOrElse { error ->
-                _uiState.update { it.copy(message = "导入失败：${error.localizedMessage}") }
+                _uiState.update { it.copy(message = "导入失败：${error.localizedMessage}", loading = false) }
             }
         }
     }
 
     fun exportJson() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val message = FaceCatalogRepository.exportToDownloads(getApplication(), _uiState.value.items)
+        viewModelScope.launch {
+            val message = withContext(Dispatchers.IO) {
+                FaceCatalogRepository.exportToDownloads(getApplication(), _uiState.value.items)
+            }
             _uiState.update { it.copy(message = message) }
         }
     }
@@ -159,7 +190,7 @@ class ManageFacesViewModel(application: Application) : AndroidViewModel(applicat
         FaceCatalogRepository.save(getApplication(), items.map { FaceCatalogRepository.sanitizeItem(it) }, fields)
     }
 
-    private fun syncVectorName(item: FaceCatalogItem) {
+    private suspend fun syncVectorName(item: FaceCatalogItem) {
         val name = item.fields["name"]?.asDisplayString()?.takeIf { it.isNotBlank() } ?: return
         if (VectorSearchEngine.getEntryById(item.id) != null) {
             VectorSearchEngine.updateName(item.id, name)

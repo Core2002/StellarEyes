@@ -36,8 +36,8 @@ fun loadBitmapFromAssets(context: Context, fileName: String): Bitmap? {
 
 fun bitmapToBase64Url(
     bitmap: Bitmap,
-    format: Bitmap.CompressFormat = Bitmap.CompressFormat.PNG,
-    quality: Int = 100
+    format: Bitmap.CompressFormat = Bitmap.CompressFormat.JPEG,
+    quality: Int = 90
 ): String {
     val outputStream = ByteArrayOutputStream()
     bitmap.compress(format, quality, outputStream)
@@ -48,7 +48,7 @@ fun bitmapToBase64Url(
         Bitmap.CompressFormat.PNG -> "image/png"
         Bitmap.CompressFormat.JPEG -> "image/jpeg"
         Bitmap.CompressFormat.WEBP -> "image/webp"
-        else -> "image/png" // 默认值
+        else -> "image/jpeg"
     }
 
     return "data:$mimeType;base64,$base64"
@@ -68,7 +68,7 @@ fun uriToBitmap(context: Context, uri: Uri): Bitmap? {
         null
     } catch (e: SecurityException) {
         Log.e("uriToBitmap", "SecurityException, permission denied for URI: $uri", e)
-        null // 例如，如果 URI 指向了没有权限访问的位置
+        null
     } catch (e: Exception) {
         Log.e("uriToBitmap", "Error decoding bitmap from URI: $uri", e)
         null
@@ -76,7 +76,6 @@ fun uriToBitmap(context: Context, uri: Uri): Bitmap? {
 }
 
 fun base64UrlToBitmap(base64Url: String): Bitmap? {
-    // 找到 base64 部分
     val base64Data = base64Url.substringAfter("base64,", missingDelimiterValue = "")
     if (base64Data.isEmpty()) return null
 
@@ -95,38 +94,7 @@ fun imageToBitmap(image: Image?): Bitmap? {
         return null
     }
 
-    val yBuffer = image.planes[0].buffer
-    val uBuffer = image.planes[1].buffer
-    val vBuffer = image.planes[2].buffer
-
-    val ySize = yBuffer.remaining()
-    val uSize = uBuffer.remaining()
-    val vSize = vBuffer.remaining()
-
-    val nv21 = ByteArray(ySize + uSize + vSize)
-
-    // Y data
-    yBuffer.get(nv21, 0, ySize)
-
-    // VU data: NV21 format is Y + VU
-    val chromaRowStride = image.planes[1].rowStride
-    val chromaPixelStride = image.planes[1].pixelStride
-
-    if (chromaPixelStride == 2 && chromaRowStride == image.width / 2 * 2) {
-        vBuffer.get(nv21, ySize, vSize)
-        uBuffer.get(nv21, ySize + vSize, uSize)
-    } else {
-        // Manual copy for uncommon strides (safe version)
-        var offset = ySize
-        for (row in 0 until image.height / 2) {
-            for (col in 0 until image.width / 2) {
-                val vuIndex = row * chromaRowStride + col * chromaPixelStride
-                nv21[offset++] = vBuffer[vuIndex]
-                nv21[offset++] = uBuffer[vuIndex]
-            }
-        }
-    }
-
+    val nv21 = yuv420ToNv21(image)
     val yuvImage = YuvImage(nv21, ImageFormat.NV21, image.width, image.height, null)
     val out = ByteArrayOutputStream()
     yuvImage.compressToJpeg(Rect(0, 0, image.width, image.height), 100, out)
@@ -154,19 +122,44 @@ fun imageProxyToBitmap(imageProxy: ImageProxy): Bitmap? {
 }
 
 fun yuv420ToNv21(image: Image): ByteArray {
-    val yBuffer = image.planes[0].buffer
-    val uBuffer = image.planes[1].buffer
-    val vBuffer = image.planes[2].buffer
+    val width = image.width
+    val height = image.height
+    val ySize = width * height
+    val uvSize = width * height / 2
 
-    val ySize = yBuffer.remaining()
-    val uSize = uBuffer.remaining()
-    val vSize = vBuffer.remaining()
+    val nv21 = ByteArray(ySize + uvSize)
 
-    val nv21 = ByteArray(ySize + uSize + vSize)
+    val yBuffer = image.planes[0].buffer // Y
+    val uBuffer = image.planes[1].buffer // U
+    val vBuffer = image.planes[2].buffer // V
 
-    yBuffer.get(nv21, 0, ySize)
-    vBuffer.get(nv21, ySize, vSize)
-    uBuffer.get(nv21, ySize + vSize, uSize)
+    val rowStride = image.planes[0].rowStride
+    assert(image.planes[0].pixelStride == 1)
+
+    var pos = 0
+    if (rowStride == width) {
+        yBuffer.get(nv21, 0, ySize)
+        pos += ySize
+    } else {
+        var yBufferPos = yBuffer.position()
+        for (row in 0 until height) {
+            yBuffer.position(yBufferPos)
+            yBuffer.get(nv21, pos, width)
+            yBufferPos += rowStride
+            pos += width
+        }
+    }
+
+    val uvRowStride = image.planes[1].rowStride
+    val uvPixelStride = image.planes[1].pixelStride
+
+    for (row in 0 until height / 2) {
+        for (col in 0 until width / 2) {
+            val uvIndex = row * uvRowStride + col * uvPixelStride
+            nv21[pos++] = vBuffer.get(uvIndex)
+            nv21[pos++] = uBuffer.get(uvIndex)
+        }
+    }
 
     return nv21
 }
@@ -195,28 +188,25 @@ fun cropFaceFromBitmap(bitmap: Bitmap, boundingBox: Rect): Bitmap? {
 }
 
 fun cropFaceFromBitmapSquare(bitmap: Bitmap, boundingBox: Rect): Bitmap? {
-    // 计算中心点
     val centerX = boundingBox.centerX()
     val centerY = boundingBox.centerY()
 
-    // 获取原始长宽
     val width = boundingBox.width()
     val height = boundingBox.height()
 
-    // 取较大值作为边长，生成正方形
     val side = maxOf(width, height)
 
-    // 计算正方形区域的左上角
     val halfSide = side / 2
     val left = (centerX - halfSide).coerceAtLeast(0)
     val top = (centerY - halfSide).coerceAtLeast(0)
 
-    // 确保裁剪区域不超出 Bitmap 边界
     val right = (left + side).coerceAtMost(bitmap.width)
     val bottom = (top + side).coerceAtMost(bitmap.height)
 
     val finalWidth = right - left
     val finalHeight = bottom - top
+
+    if (finalWidth <= 0 || finalHeight <= 0) return null
 
     return try {
         Bitmap.createBitmap(bitmap, left, top, finalWidth, finalHeight)
@@ -234,23 +224,18 @@ fun rotateBitmap(bitmap: Bitmap, rotationDegrees: Float): Bitmap {
 }
 
 fun toGrayscale(src: Bitmap): Bitmap {
-    // 创建与原图大小相同的空白 Bitmap
     val width = src.width
     val height = src.height
     val grayBitmap = createBitmap(width, height)
 
-    // 创建画布
     val canvas = Canvas(grayBitmap)
 
-    // 创建灰度矩阵
     val colorMatrix = ColorMatrix()
-    colorMatrix.setSaturation(0f) // 饱和度设为 0 表示灰度
+    colorMatrix.setSaturation(0f)
 
-    // 设置画笔颜色过滤器
     val paint = Paint()
     paint.colorFilter = ColorMatrixColorFilter(colorMatrix)
 
-    // 绘制到灰度 Bitmap
     canvas.drawBitmap(src, 0f, 0f, paint)
 
     return grayBitmap
@@ -266,12 +251,10 @@ fun bitmapToFaceNetInput(bitmap: Bitmap): FloatArray {
         for (x in 0 until width) {
             val pixel = bitmap[x, y]
 
-            // 提取 R、G、B 分量
             val r = (pixel shr 16 and 0xFF).toFloat()
             val g = (pixel shr 8 and 0xFF).toFloat()
             val b = (pixel and 0xFF).toFloat()
 
-            // 归一化到 [-1, 1]
             input[index++] = (r - 127.5f) / 128.0f
             input[index++] = (g - 127.5f) / 128.0f
             input[index++] = (b - 127.5f) / 128.0f
@@ -280,4 +263,3 @@ fun bitmapToFaceNetInput(bitmap: Bitmap): FloatArray {
 
     return input
 }
-

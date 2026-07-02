@@ -37,6 +37,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.scale
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.Face
 import `fun`.fifu.stellareyes.FaceNet
@@ -46,8 +47,12 @@ import `fun`.fifu.stellareyes.data.FaceCatalogRepository
 import `fun`.fifu.stellareyes.data.VectorSearchEngine.cosineSimilarity
 import `fun`.fifu.stellareyes.ui.settings.SettingsViewModel
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
 import kotlin.system.measureTimeMillis
 import kotlin.uuid.ExperimentalUuidApi
@@ -55,10 +60,7 @@ import kotlin.uuid.Uuid
 
 private const val TAG = "FaceRecognition"
 
-// Helper data class to store candidate faces
 data class FaceCandidate(val bitmap: Bitmap, val embedding: FloatArray) {
-    // Auto-generated equals and hashCode for FloatArray are based on identity,
-    // so we need to override them for proper comparison if these objects are stored in sets/maps.
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
@@ -83,7 +85,7 @@ sealed class RecognitionState {
         RecognitionState()
 
     data class PendingSelection(val candidates: List<FaceCandidate>) :
-        RecognitionState() // New state
+        RecognitionState()
 
     object NewFaceAdded : RecognitionState()
     object Idle : RecognitionState()
@@ -94,7 +96,6 @@ fun FaceRecognitionResultUI(viewModel: FaceRecognitionViewModel, context: Contex
     val state = viewModel.recognitionState
     var selectedCandidateIndex by remember { mutableStateOf<Int?>(null) }
 
-    // Reset selected index when dialog is dismissed or state changes away from PendingSelection
     if (state !is RecognitionState.PendingSelection && selectedCandidateIndex != null) {
         selectedCandidateIndex = null
     }
@@ -185,7 +186,7 @@ fun FaceRecognitionResultUI(viewModel: FaceRecognitionViewModel, context: Contex
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
                         LazyRow(
-                            modifier = Modifier.height(100.dp), // Adjust height as needed
+                            modifier = Modifier.height(100.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             itemsIndexed(state.candidates) { index, candidate ->
@@ -193,14 +194,14 @@ fun FaceRecognitionResultUI(viewModel: FaceRecognitionViewModel, context: Contex
                                     bitmap = candidate.bitmap.asImageBitmap(),
                                     contentDescription = "Candidate face $index",
                                     modifier = Modifier
-                                        .size(80.dp) // Adjust size as needed
+                                        .size(80.dp)
                                         .clickable { selectedCandidateIndex = index }
                                         .border(
                                             width = 2.dp,
                                             color = if (selectedCandidateIndex == index) MaterialTheme.colorScheme.primary else Color.Transparent,
                                             shape = CircleShape
                                         )
-                                        .padding(2.dp), // Padding inside the border
+                                        .padding(2.dp),
                                     contentScale = ContentScale.Crop
                                 )
                             }
@@ -211,7 +212,7 @@ fun FaceRecognitionResultUI(viewModel: FaceRecognitionViewModel, context: Contex
                     TextButton(
                         onClick = {
                             selectedCandidateIndex?.let { index ->
-                                if (index < state.candidates.size) { // defensive check
+                                if (index < state.candidates.size) {
                                     viewModel.saveSelectedFace(context, state.candidates[index])
                                 }
                             }
@@ -234,47 +235,46 @@ fun FaceRecognitionResultUI(viewModel: FaceRecognitionViewModel, context: Contex
             )
         }
 
-        RecognitionState.Idle -> {
-            // 不显示弹窗
-        }
+        RecognitionState.Idle -> {}
     }
 }
 
 @Composable
 fun FaceRecognitionScreen(viewModel: FaceRecognitionViewModel, context: Context) {
     Box(modifier = Modifier.fillMaxSize()) {
-        // 你的摄像头预览和识别按钮等 UI
         FaceRecognitionResultUI(viewModel, context)
     }
 }
 
-object FaceRecognitionViewModel : ViewModel() {
+class FaceRecognitionViewModel : ViewModel() {
 
     private val newFaceCandidates = mutableListOf<FaceCandidate>()
-    private const val MAX_CANDIDATES = 3 // Threshold for prompting user selection
+    private val MAX_CANDIDATES = 3
 
     var recognitionState by mutableStateOf<RecognitionState>(RecognitionState.Idle)
         private set
 
     fun resetState() {
-        newFaceCandidates.clear() // Make sure to clear candidates if they were copied to PendingSelection
+        newFaceCandidates.clear()
         recognitionState = RecognitionState.Idle
     }
 
     @OptIn(ExperimentalUuidApi::class)
     fun saveSelectedFace(context: Context, candidate: FaceCandidate) {
-        val id = Uuid.random().toString()
-        VectorSearchEngine.add(
-            id,
-            candidate.embedding,
-            "p${System.currentTimeMillis()}", // Consider allowing user to name it
-            bitmapToBase64Url(candidate.bitmap) // Assuming bitmapToBase64Url is defined
-        )
-        VectorSearchEngine.saveToFile(context)
-        FaceCatalogRepository.syncVectorEntry(context, id)
-        recognitionState = RecognitionState.NewFaceAdded
-        // After showing NewFaceAdded, reset to Idle. This could be handled by the dialog's onDismiss or a timer.
-        // For simplicity now, the dialog's own actions will call resetState.
+        viewModelScope.launch(Dispatchers.IO) {
+            val id = Uuid.random().toString()
+            VectorSearchEngine.add(
+                id,
+                candidate.embedding,
+                "p${System.currentTimeMillis()}",
+                bitmapToBase64Url(candidate.bitmap)
+            )
+            VectorSearchEngine.saveToFile(context)
+            FaceCatalogRepository.syncVectorEntry(context, id)
+            withContext(Dispatchers.Main) {
+                recognitionState = RecognitionState.NewFaceAdded
+            }
+        }
     }
 
 
@@ -287,24 +287,19 @@ object FaceRecognitionViewModel : ViewModel() {
         val performInference = FaceNet.getFaceEmbedding(faceBitmap)
         val top1 = VectorSearchEngine.searchTop1(performInference)
         if (!top1.first.isNullOrEmpty()) {
-            val entre = VectorSearchEngine.getEntryById(top1.first!!)
-            if (entre != null) {
-                // Assuming base64UrlToBitmap is available for full Recognized state display
-                val img_db = base64UrlToBitmap(entre.imageUri)
-                if (img_db != null) {
-                    val performInference_db = FaceNet.getFaceEmbedding(img_db)
-                    val cosineSimilarity =
-                        cosineSimilarity(performInference_db, performInference)
-                    recognitionState =
-                        RecognitionState.Recognized(entre, faceBitmap, cosineSimilarity)
-                } else { // Fallback if DB image can't be loaded for comparison
-                    recognitionState = RecognitionState.Recognized(entre, faceBitmap, top1.second ?: 0f)
+            val entry = VectorSearchEngine.getEntryById(top1.first!!)
+            if (entry != null) {
+                withContext(Dispatchers.Main) {
+                    recognitionState = RecognitionState.Recognized(entry, faceBitmap, top1.second)
                 }
             }
         } else if (viewModel.isAutoRecordEnabled.value) {
             newFaceCandidates.add(FaceCandidate(faceBitmap, performInference))
             if (newFaceCandidates.size >= MAX_CANDIDATES) {
-                recognitionState = RecognitionState.PendingSelection(newFaceCandidates.toList())
+                val candidatesSnapshot = newFaceCandidates.toList()
+                withContext(Dispatchers.Main) {
+                    recognitionState = RecognitionState.PendingSelection(candidatesSnapshot)
+                }
                 newFaceCandidates.clear()
             } else {
                 Log.d(
@@ -328,7 +323,7 @@ object FaceRecognitionViewModel : ViewModel() {
                 id,
                 performInference,
                 "P${System.currentTimeMillis()}",
-                bitmapToBase64Url(faceBitmap) // Assuming bitmapToBase64Url is defined
+                bitmapToBase64Url(faceBitmap)
             )
             VectorSearchEngine.saveToFile(context)
             FaceCatalogRepository.syncVectorEntry(context, id)
@@ -340,31 +335,18 @@ object FaceRecognitionViewModel : ViewModel() {
         faces: List<Face>,
         inputImage: InputImage,
         context: Context,
-        viewModel: SettingsViewModel
+        settingsViewModel: SettingsViewModel
     ) {
         for (face in faces) {
-            val bitmapInternal = inputImage.bitmapInternal
-            if (bitmapInternal == null) continue
-            // Assuming cropFaceFromBitmapSquare is defined
-            val faceBitmap = cropFaceFromBitmapSquare(
-                bitmapInternal,
-                face.boundingBox
-            )
-            if (faceBitmap == null) continue
+            val bitmapInternal = inputImage.bitmapInternal ?: continue
+            val faceBitmap = cropFaceFromBitmapSquare(bitmapInternal, face.boundingBox) ?: continue
             val resized = faceBitmap.scale(160, 160)
             CoroutineScope(FaceNet.tfliteThread).launch {
                 val executionTime = measureTimeMillis {
-                    runFaceNetModel(context, viewModel, resized)
+                    runFaceNetModel(context, settingsViewModel, resized)
                 }
-                Log.d(
-                    TAG,
-                    "runFaceNetModel execution time: $executionTime ms"
-                )
+                Log.d(TAG, "runFaceNetModel execution time: $executionTime ms")
             }
-        }
-        if (faces.isEmpty()) {
-            Log.d(TAG, "No faces detected.")
-            return
         }
     }
 
@@ -373,76 +355,38 @@ object FaceRecognitionViewModel : ViewModel() {
         faces: List<Face>,
         inputImage: InputImage,
         context: Context,
-        viewModel: SettingsViewModel
+        settingsViewModel: SettingsViewModel
     ) {
-        val largestFace =
-            faces.maxByOrNull { it.boundingBox.width() * it.boundingBox.height() }
+        val largestFace = faces.maxByOrNull { it.boundingBox.width() * it.boundingBox.height() }
 
         largestFace?.let { face ->
-            val bitmapInternal = inputImage.bitmapInternal
-            if (bitmapInternal == null) {
-                Log.e(TAG, "bitmapInternal is null, cannot crop face.")
-                return@let
-            }
-            // Assuming cropFaceFromBitmapSquare is defined
-            val faceBitmap = cropFaceFromBitmapSquare(
-                bitmapInternal,
-                face.boundingBox
-            )
-            if (faceBitmap == null) {
-                Log.e(TAG, "Failed to crop the largest face.")
-                return@let
-            }
+            val bitmapInternal = inputImage.bitmapInternal ?: return@let
+            val faceBitmap = cropFaceFromBitmapSquare(bitmapInternal, face.boundingBox) ?: return@let
             val resized = faceBitmap.scale(160, 160)
             CoroutineScope(FaceNet.tfliteThread).launch {
                 val executionTime = measureTimeMillis {
-                    runFaceNetModel(context, viewModel, resized)
+                    runFaceNetModel(context, settingsViewModel, resized)
                 }
-                Log.d(
-                    TAG,
-                    "runFaceNetModel for largest face execution time: $executionTime ms"
-                )
+                Log.d(TAG, "runFaceNetModel for largest face execution time: $executionTime ms")
             }
         }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun processPicFace(
+    suspend fun processPicFace(
         faces: List<Face>,
         inputImage: InputImage,
         context: Context
     ) {
-        val largestFace =
-            faces.maxByOrNull { it.boundingBox.width() * it.boundingBox.height() }
+        val largestFace = faces.maxByOrNull { it.boundingBox.width() * it.boundingBox.height() }
 
         largestFace?.let { face ->
-            val bitmapInternal = inputImage.bitmapInternal
-            if (bitmapInternal == null) {
-                Log.e(TAG, "bitmapInternal is null, cannot crop face.")
-                return@let
-            }
-            // Assuming cropFaceFromBitmapSquare is defined
-            val faceBitmap = cropFaceFromBitmapSquare(
-                bitmapInternal,
-                face.boundingBox
-            )
-            if (faceBitmap == null) {
-                Log.e(TAG, "Failed to crop the largest face.")
-                return@let
-            }
+            val bitmapInternal = inputImage.bitmapInternal ?: return@let
+            val faceBitmap = cropFaceFromBitmapSquare(bitmapInternal, face.boundingBox) ?: return@let
             val resized = faceBitmap.scale(160, 160)
-            CoroutineScope(FaceNet.tfliteThread).launch {
-                val executionTime = measureTimeMillis {
-                    runOnlyPic(context, resized)
-                }
-                Log.d(
-                    TAG,
-                    "runFaceNetModel for largest face execution time: $executionTime ms"
-                )
+            withContext(FaceNet.tfliteThread) {
+                runOnlyPic(context, resized)
             }
         }
     }
 }
-
-
-
